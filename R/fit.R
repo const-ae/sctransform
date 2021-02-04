@@ -6,6 +6,7 @@ fit_poisson <- function(umi, model_str, data, theta_estimation_fun) {
   par_mat <- t(apply(umi, 1, function(y) {
     fit <- qpois_reg(regressor_data, y, 1e-9, 100, 1.0001, TRUE)
     theta <- switch(theta_estimation_fun,
+      # 'theta.ml' = as.numeric(x = theta.ml(y = y, mu = fit$fitted, limit = 30)),
       'theta.ml' = as.numeric(x = theta.ml(y = y, mu = fit$fitted)),
       'theta.mm' = as.numeric(x = theta.mm(y = y, mu = fit$fitted, dfr = dfr)),
       stop('theta_estimation_fun ', theta_estimation_fun, ' unknown - only theta.ml and theta.mm supported at the moment')

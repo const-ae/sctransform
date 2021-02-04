@@ -122,6 +122,7 @@ vst <- function(umi,
                 verbosity = 2,
                 verbose = NULL,
                 show_progress = NULL) {
+  warning("Remember this is the forked version of sctransform!!!!")
   arguments <- as.list(environment())
   arguments <- arguments[!names(arguments) %in% c("umi", "cell_attr")]
 
@@ -148,19 +149,15 @@ vst <- function(umi,
   }
   
   # Special case offset model - override most parameters
-  if (startsWith(x = method, prefix = 'offset')) {
+  if (startsWith(x = method, prefix = 'offset') && ! is.null(theta_given)) {
     cell_attr <- NULL
     latent_var <- c('log_umi')
     batch_var <- NULL
     latent_var_nonreg <- NULL
     n_genes <- NULL
     n_cells <- NULL
-    do_regularize <- FALSE
-    if (is.null(theta_given)) {
-      theta_given <- 100
-    } else {
-      theta_given <- theta_given[1]
-    }
+    # do_regularize <- FALSE
+    theta_given <- theta_given[1]
   }
   
 
@@ -384,11 +381,37 @@ get_model_pars <- function(genes_step1, bin_size, umi, model_str, cells_step1,
   # Special case offset model with one theta for all genes
   if (startsWith(x = method, prefix = 'offset')) {
     gene_mean <- rowMeans(umi)
+    names(gene_mean) <- rownames(umi)
     mean_cell_sum <- mean(colSums(umi))
-    model_pars <- cbind(rep(theta_given, nrow(umi)),
-                        log(gene_mean) - log(mean_cell_sum),
-                        rep(log(10), nrow(umi)))
-    dimnames(model_pars) <- list(rownames(umi), c('theta', '(Intercept)', 'log_umi'))
+    
+    if(is.null(theta_given)){
+      dfr <- ncol(umi) - 1
+      theta <- sapply(genes_step1, function(gene_name){
+        y <- umi[gene_name, ]
+        mu <- exp(log(gene_mean[gene_name]) - log(mean_cell_sum) + log(10) * data_step1[, "log_umi"])
+        tryCatch({
+          switch(theta_estimation_fun,
+                        # 'theta.ml' = as.numeric(x = theta.ml(y = y, mu = mu, limit = 30)),
+                        'theta.ml' = as.numeric(x = theta.ml(y = y, mu = mu)),
+                        'theta.mm' = as.numeric(x = theta.mm(y = y, mu = mu, dfr = dfr)),
+                        stop('theta_estimation_fun ', theta_estimation_fun, ' unknown - only theta.ml and theta.mm supported at the moment'))
+        }, error = function(err){
+          print(gene_name)
+          stop(gene_name)
+        })
+      })
+      model_pars <- cbind(theta,
+                          log(gene_mean[genes_step1]) - log(mean_cell_sum),
+                          rep(log(10), length(genes_step1)))
+    }else{
+      theta <- rep(theta_given, nrow(umi))
+      model_pars <- cbind(theta,
+                          log(gene_mean) - log(mean_cell_sum),
+                          rep(log(10), nrow(umi)))
+    }
+    
+   
+    dimnames(model_pars) <- list(rownames(umi[genes_step1, ]), c('theta', '(Intercept)', 'log_umi'))
     if (method == 'offset_shared_theta_estimate') {
       # use all genes with detection rate > 0.5 to estimate theta
       # if there are more, use the 250 most highly expressed ones
