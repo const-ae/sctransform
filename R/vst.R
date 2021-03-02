@@ -371,6 +371,7 @@ vst <- function(umi,
   }
   times$done = Sys.time()
   rv$times <- times
+  rv$is_fork <- TRUE
   return(rv)
 }
 
